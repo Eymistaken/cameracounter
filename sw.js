@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blink-counter-v3'; // GÜNCELLEME İÇİN BURAYI DEĞİŞTİR (v3, v4, v5...)
+const CACHE_NAME = 'blink-counter-v4'; // GÜNCELLEME İÇİN BURAYI DEĞİŞTİR (v3, v4, v5...)
 const urlsToCache = [
   './',
   './index.html',
@@ -66,3 +66,4 @@ self.addEventListener('activate', (event) => {
     })
   );
 });
+
