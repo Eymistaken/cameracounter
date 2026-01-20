@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Göz Kırpma Sayacı</title>
+
+    <!-- PWA ve Mobil Uyumluluk Etiketleri -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <!-- icon.png referansı kaldırıldı -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            overflow: hidden;
+            touch-action: none;
+            font-family: 'Courier New', Courier, monospace;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .center-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+
+        #counter {
+            font-size: 35vw;
+            font-weight: bold;
+            line-height: 1;
+            transition: color 0.2s, opacity 0.2s;
+            z-index: 1;
+        }
+
+        #hiddenVideo,
+        #hiddenCanvas {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 64px;
+            height: 64px;
+            z-index: 10;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #333;
+            margin: 5px;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        .active-dot {
+            background-color: #0f0;
+            box-shadow: 0 0 10px #0f0;
+        }
+
+        .progress-container {
+            width: 100px;
+            height: 4px;
+            background-color: #333;
+            margin-top: 20px;
+            border-radius: 2px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #fff;
+            transition: width 0.1s linear;
+        }
+
+        #calibBtnToggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+            opacity: 0.5;
+            cursor: pointer;
+        }
+
+        #calibOverlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 60;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .calib-step-text {
+            font-size: 1.2rem;
+            color: #ccc;
+            margin-bottom: 2rem;
+            max-width: 80%;
+        }
+
+        #calibActionBtn {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 4px solid #444;
+            background: transparent;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            transition: all 0.1s;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #calibActionBtn.pressing {
+            background-color: #222;
+            transform: scale(0.95);
+            border-color: #fff;
+        }
+
+        #calibActionBtn.success {
+            background-color: #0f0;
+            color: #000;
+            border-color: #0f0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <video id="hiddenVideo" playsinline muted></video>
+    <canvas id="hiddenCanvas"></canvas>
+
+    <button id="calibBtnToggle" class="p-2 text-sm border border-gray-700 rounded text-gray-500 hover:text-white">
+        ⚙️ AYARLAR
+    </button>
+
+    <div id="calibOverlay">
+        <h2 class="text-2xl font-bold mb-4 text-white">Kalibrasyon</h2>
+        <p id="calibInstruction" class="calib-step-text">...</p>
+        <div id="calibActionBtn">BASILI TUT</div>
+        <p id="calibLiveVal" class="mt-8 text-xs text-gray-500 font-mono">Şu anki Işık: 0</p>
+        <button id="closeCalib" class="mt-8 text-gray-500 underline text-sm">İptal / Çık</button>
+    </div>
+
+    <div class="center-content">
+        <div id="counter">0</div>
+        <div id="cooldownContainer" class="progress-container">
+            <div id="cooldownBar" class="progress-bar"></div>
+        </div>
+        <div class="flex mt-8 space-x-4">
+            <div id="cycle1" class="status-dot"></div>
+            <div id="cycle2" class="status-dot"></div>
+        </div>
+        <div id="startOverlay" class="absolute inset-0 bg-black flex flex-col justify-center items-center z-50">
+            <h1 class="text-2xl mb-4 text-gray-300">Hareket Algılayıcı</h1>
+            <p class="text-gray-500 mb-2 text-center px-4">1. Hareket: Hazırlık</p>
+            <p class="text-gray-500 mb-8 text-center px-4">2. Hareket: Sayı Artar</p>
+            <button id="startBtn"
+                class="px-8 py-4 bg-white text-black text-xl font-bold rounded-full active:scale-95 transition-transform">
+                BAŞLAT
+            </button>
+            <p class="text-xs text-gray-600 mt-8 max-w-xs text-center">
+                Işık ayarı için sağ üstteki butonu kullanabilirsin.
+            </p>
+        </div>
+        <div id="debug" class="absolute bottom-4 text-xs text-gray-800 font-mono">Bekleniyor...</div>
+    </div>
+
+    <script>
+        // --- Service Worker Kaydı ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('SW Başarıyla kaydedildi:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('SW Kaydı başarısız:', error);
+                    });
+            });
+        }
+
+        // --- Uygulama Mantığı ---
+        let count = 0;
+        let blinkCycle = 0;
+        let isDarkState = false;
+        let darkStartTime = 0;
+        let currentBrightness = 0;
+
+        let settings = {
+            brightVal: 80,
+            darkVal: 20,
+            thresholdHigh: 50,
+            thresholdLow: 40
+        };
+
+        const MIN_DARK_DURATION = 500; // Yarım saniye
+
+        const video = document.getElementById('hiddenVideo');
+        const canvas = document.getElementById('hiddenCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const counterEl = document.getElementById('counter');
+        const startBtn = document.getElementById('startBtn');
+        const overlay = document.getElementById('startOverlay');
+        const debugEl = document.getElementById('debug');
+        const cycle1 = document.getElementById('cycle1');
+        const cycle2 = document.getElementById('cycle2');
+        const cooldownContainer = document.getElementById('cooldownContainer');
+        const cooldownBar = document.getElementById('cooldownBar');
+
+        const calibBtnToggle = document.getElementById('calibBtnToggle');
+        const calibOverlay = document.getElementById('calibOverlay');
+        const calibInstruction = document.getElementById('calibInstruction');
+        const calibActionBtn = document.getElementById('calibActionBtn');
+        const calibLiveVal = document.getElementById('calibLiveVal');
+        const closeCalib = document.getElementById('closeCalib');
+
+        function loadSettings() {
+            const saved = localStorage.getItem('blinkCounterSettings');
+            if (saved) {
+                settings = JSON.parse(saved);
+            }
+            updateThresholds();
+        }
+
+        function updateThresholds() {
+            const range = settings.brightVal - settings.darkVal;
+            if (range < 10) {
+                settings.thresholdLow = settings.darkVal + 5;
+                settings.thresholdHigh = settings.darkVal + 10;
+            } else {
+                settings.thresholdLow = settings.darkVal + (range * 0.30);
+                settings.thresholdHigh = settings.brightVal - (range * 0.30);
+            }
+            debugEl.innerText = `Sınırlar: <${Math.floor(settings.thresholdLow)} | >${Math.floor(settings.thresholdHigh)}`;
+        }
+
+        loadSettings();
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "user",
+                        width: { ideal: 64 },
+                        height: { ideal: 64 }
+                    }
+                });
+
+                video.srcObject = stream;
+                video.play();
+                overlay.style.display = 'none';
+                requestAnimationFrame(processFrame);
+            } catch (err) {
+                alert("Kamera izni gerekli.");
+            }
+        });
+
+        function processFrame() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = 64;
+                canvas.height = 64;
+                ctx.drawImage(video, 0, 0, 64, 64);
+
+                const frame = ctx.getImageData(0, 0, 64, 64);
+                const length = frame.data.length;
+                let totalBrightness = 0;
+
+                for (let i = 0; i < length; i += 16) {
+                    const r = frame.data[i];
+                    const g = frame.data[i + 1];
+                    const b = frame.data[i + 2];
+                    totalBrightness += (r + g + b) / 3;
+                }
+
+                currentBrightness = totalBrightness / (length / 16);
+
+                if (calibOverlay.style.display === 'flex') {
+                    calibLiveVal.innerText = `Işık: ${Math.floor(currentBrightness)}`;
+                } else {
+                    handleGameLogic(currentBrightness);
+                    updateCooldownUI();
+                }
+            }
+            requestAnimationFrame(processFrame);
+        }
+
+        function handleGameLogic(brightness) {
+            if (!isDarkState && brightness < settings.thresholdLow) {
+                isDarkState = true;
+                darkStartTime = Date.now();
+                counterEl.style.color = "#333";
+                cooldownContainer.style.opacity = "1";
+            }
+            else if (isDarkState && brightness > settings.thresholdHigh) {
+                isDarkState = false;
+                counterEl.style.color = "#fff";
+                cooldownContainer.style.opacity = "0";
+                cooldownBar.style.width = "0%";
+
+                const duration = Date.now() - darkStartTime;
+
+                if (duration >= MIN_DARK_DURATION) {
+                    blinkCycle++;
+                    if (blinkCycle === 1) {
+                        cycle1.classList.add('active-dot');
+                        debugEl.innerText = "Hazırlık Tamam";
+                    } else if (blinkCycle >= 2) {
+                        cycle2.classList.add('active-dot');
+                        incrementCounter();
+                        blinkCycle = 0;
+                        debugEl.innerText = "Tetiklendi!";
+                        setTimeout(() => {
+                            cycle1.classList.remove('active-dot');
+                            cycle2.classList.remove('active-dot');
+                        }, 500);
+                    }
+                } else {
+                    cooldownContainer.style.backgroundColor = "red";
+                    setTimeout(() => { cooldownContainer.style.backgroundColor = "#333"; }, 200);
+                    debugEl.innerText = "Çok hızlı!";
+                }
+            }
+        }
+
+        function incrementCounter() {
+            count++;
+            counterEl.innerText = count;
+            counterEl.style.transform = "scale(1.3)";
+            setTimeout(() => {
+                counterEl.style.transform = "scale(1)";
+            }, 150);
+        }
+
+        function updateCooldownUI() {
+            if (isDarkState) {
+                const elapsed = Date.now() - darkStartTime;
+                const percentage = Math.min((elapsed / MIN_DARK_DURATION) * 100, 100);
+                cooldownBar.style.width = `${percentage}%`;
+                cooldownBar.style.backgroundColor = percentage >= 100 ? "#0f0" : "#fff";
+            }
+        }
+
+        // --- Kalibrasyon ---
+        let calibStep = 0;
+        let pressTimer = null;
+        let tempBright = 0;
+        let tempDark = 0;
+
+        calibBtnToggle.addEventListener('click', () => {
+            calibOverlay.style.display = 'flex';
+            startCalibrationFlow();
+        });
+
+        closeCalib.addEventListener('click', () => {
+            calibOverlay.style.display = 'none';
+        });
+
+        function startCalibrationFlow() {
+            calibStep = 1;
+            calibActionBtn.classList.remove('success');
+            calibActionBtn.innerText = "BASILI TUT";
+            calibInstruction.innerText = "1. AYDINLIK ortam için butona basılı tut.";
+        }
+
+        function nextCalibrationStep() {
+            if (calibStep === 1) {
+                calibStep = 2;
+                calibInstruction.innerText = "2. Kamerayı KARANLIK yap (elini koy) ve basılı tut.";
+                calibActionBtn.innerText = "BASILI TUT";
+                calibActionBtn.classList.remove('success');
+            } else if (calibStep === 2) {
+                finishCalibration();
+            }
+        }
+
+        function finishCalibration() {
+            if (tempDark >= tempBright) {
+                alert("Hata: Karanlık aydınlıktan parlak olamaz.");
+                startCalibrationFlow();
+                return;
+            }
+            settings.brightVal = tempBright;
+            settings.darkVal = tempDark;
+            localStorage.setItem('blinkCounterSettings', JSON.stringify(settings));
+            updateThresholds();
+            calibInstruction.innerText = "Kaydedildi!";
+            calibActionBtn.innerText = "TAMAM";
+            setTimeout(() => { calibOverlay.style.display = 'none'; }, 1000);
+        }
+
+        const startPress = (e) => {
+            e.preventDefault();
+            calibActionBtn.classList.add('pressing');
+            pressTimer = setTimeout(() => {
+                calibActionBtn.classList.remove('pressing');
+                calibActionBtn.classList.add('success');
+                calibActionBtn.innerText = "OK";
+                if (calibStep === 1) tempBright = currentBrightness;
+                else if (calibStep === 2) tempDark = currentBrightness;
+                setTimeout(nextCalibrationStep, 500);
+            }, 500);
+        };
+
+        const endPress = (e) => {
+            if (e) e.preventDefault();
+            calibActionBtn.classList.remove('pressing');
+            if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        };
+
+        calibActionBtn.addEventListener('mousedown', startPress);
+        calibActionBtn.addEventListener('touchstart', startPress);
+        calibActionBtn.addEventListener('mouseup', endPress);
+        calibActionBtn.addEventListener('mouseleave', endPress);
+        calibActionBtn.addEventListener('touchend', endPress);
+    </script>
+</body>
+
+</html>
