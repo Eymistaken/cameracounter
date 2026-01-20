@@ -6,12 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Göz Kırpma Sayacı</title>
 
-    <!-- PWA ve Mobil Uyumluluk Etiketleri -->
+    <!-- PWA -->
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <!-- icon.png referansı kaldırıldı -->
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -36,7 +35,8 @@
         }
 
         #counter {
-            font-size: 35vw;
+            font-size: 50vw;
+            /* Devasa Boyut */
             font-weight: bold;
             line-height: 1;
             transition: color 0.2s, opacity 0.2s;
@@ -86,20 +86,65 @@
             transition: width 0.1s linear;
         }
 
-        #calibBtnToggle {
+        /* Kalibrasyon Butonları */
+        .settings-btn {
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 20;
-            opacity: 0.5;
-            cursor: pointer;
+            z-index: 60;
+            /* Overlay üstünde olsun */
+            opacity: 0.7;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            font-size: 0.8rem;
+            color: #ccc;
         }
 
+        /* Sıfırlama Butonu (Sol Alt) */
+        #resetBtn {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            display: none;
+            /* Sadece oyun başlayınca görünür */
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            color: #333;
+            transition: all 0.2s;
+            z-index: 40;
+        }
+
+        #resetBtn.pressing {
+            border-color: #f00;
+            color: #f00;
+            transform: scale(0.9);
+        }
+
+        /* Zorla Güncelle Butonu (Sağ Alt - Sadece Menüde) */
+        #forceUpdateBtn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            font-size: 0.7rem;
+            color: #444;
+            text-decoration: underline;
+            padding: 10px;
+            z-index: 60;
+        }
+
+        /* Kalibrasyon Overlay */
         #calibOverlay {
             position: absolute;
             inset: 0;
-            background-color: rgba(0, 0, 0, 0.95);
-            z-index: 60;
+            background-color: rgba(0, 0, 0, 0.98);
+            z-index: 70;
             display: none;
             flex-direction: column;
             justify-content: center;
@@ -152,57 +197,88 @@
     <video id="hiddenVideo" playsinline muted></video>
     <canvas id="hiddenCanvas"></canvas>
 
-    <button id="calibBtnToggle" class="p-2 text-sm border border-gray-700 rounded text-gray-500 hover:text-white">
+    <!-- Global Ayarlar Butonu -->
+    <button id="calibBtnToggle" class="settings-btn">
         ⚙️ AYARLAR
     </button>
 
+    <!-- Kalibrasyon Arayüzü -->
     <div id="calibOverlay">
-        <h2 class="text-2xl font-bold mb-4 text-white">Kalibrasyon</h2>
+        <h2 class="text-2xl font-bold mb-4 text-white">Işık Ayarı</h2>
         <p id="calibInstruction" class="calib-step-text">...</p>
         <div id="calibActionBtn">BASILI TUT</div>
         <p id="calibLiveVal" class="mt-8 text-xs text-gray-500 font-mono">Şu anki Işık: 0</p>
-        <button id="closeCalib" class="mt-8 text-gray-500 underline text-sm">İptal / Çık</button>
+        <button id="closeCalib" class="mt-8 text-gray-500 underline text-sm">İptal / Geri Dön</button>
     </div>
 
+    <!-- Ana Arayüz -->
     <div class="center-content">
         <div id="counter">0</div>
+
+        <!-- Cooldown Göstergesi -->
         <div id="cooldownContainer" class="progress-container">
             <div id="cooldownBar" class="progress-bar"></div>
         </div>
+
+        <!-- Durum Noktaları -->
         <div class="flex mt-8 space-x-4">
             <div id="cycle1" class="status-dot"></div>
             <div id="cycle2" class="status-dot"></div>
         </div>
+
+        <!-- Sıfırlama Butonu (Oyun İçin) -->
+        <div id="resetBtn">↻</div>
+
+        <!-- Başlangıç Overlay -->
         <div id="startOverlay" class="absolute inset-0 bg-black flex flex-col justify-center items-center z-50">
             <h1 class="text-2xl mb-4 text-gray-300">Hareket Algılayıcı</h1>
             <p class="text-gray-500 mb-2 text-center px-4">1. Hareket: Hazırlık</p>
             <p class="text-gray-500 mb-8 text-center px-4">2. Hareket: Sayı Artar</p>
+
             <button id="startBtn"
-                class="px-8 py-4 bg-white text-black text-xl font-bold rounded-full active:scale-95 transition-transform">
+                class="px-8 py-4 bg-white text-black text-xl font-bold rounded-full active:scale-95 transition-transform mb-8">
                 BAŞLAT
             </button>
-            <p class="text-xs text-gray-600 mt-8 max-w-xs text-center">
-                Işık ayarı için sağ üstteki butonu kullanabilirsin.
-            </p>
+
+            <!-- Zorla Güncelle Butonu -->
+            <button id="forceUpdateBtn">⚠️ Güncelleme Sorunu mu var?</button>
         </div>
-        <div id="debug" class="absolute bottom-4 text-xs text-gray-800 font-mono">Bekleniyor...</div>
+
+        <div id="debug" class="absolute bottom-4 text-xs text-gray-800 font-mono text-center w-full">Bekleniyor...</div>
     </div>
 
     <script>
         // --- Service Worker Kaydı ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
-                        console.log('SW Başarıyla kaydedildi:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('SW Kaydı başarısız:', error);
-                    });
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
             });
         }
 
-        // --- Uygulama Mantığı ---
+        // --- Wake Lock (Ekran Kararmasını Engelleme) ---
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Ekran uyanık kalacak.');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Ekran kilidi serbest bırakıldı.');
+                    });
+                }
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
+        // Sekme değiştirip geri gelince Wake Lock'u tekrar iste
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
+        // --- Değişkenler ---
         let count = 0;
         let blinkCycle = 0;
         let isDarkState = false;
@@ -218,6 +294,7 @@
 
         const MIN_DARK_DURATION = 500; // Yarım saniye
 
+        // Elementler
         const video = document.getElementById('hiddenVideo');
         const canvas = document.getElementById('hiddenCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -229,7 +306,10 @@
         const cycle2 = document.getElementById('cycle2');
         const cooldownContainer = document.getElementById('cooldownContainer');
         const cooldownBar = document.getElementById('cooldownBar');
+        const resetBtn = document.getElementById('resetBtn');
+        const forceUpdateBtn = document.getElementById('forceUpdateBtn');
 
+        // Kalibrasyon
         const calibBtnToggle = document.getElementById('calibBtnToggle');
         const calibOverlay = document.getElementById('calibOverlay');
         const calibInstruction = document.getElementById('calibInstruction');
@@ -237,11 +317,10 @@
         const calibLiveVal = document.getElementById('calibLiveVal');
         const closeCalib = document.getElementById('closeCalib');
 
+        // --- Ayarları Yükle ---
         function loadSettings() {
             const saved = localStorage.getItem('blinkCounterSettings');
-            if (saved) {
-                settings = JSON.parse(saved);
-            }
+            if (saved) { settings = JSON.parse(saved); }
             updateThresholds();
         }
 
@@ -254,30 +333,28 @@
                 settings.thresholdLow = settings.darkVal + (range * 0.30);
                 settings.thresholdHigh = settings.brightVal - (range * 0.30);
             }
-            debugEl.innerText = `Sınırlar: <${Math.floor(settings.thresholdLow)} | >${Math.floor(settings.thresholdHigh)}`;
         }
-
         loadSettings();
 
+        // --- Başlatma ---
         startBtn.addEventListener('click', async () => {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: "user",
-                        width: { ideal: 64 },
-                        height: { ideal: 64 }
-                    }
-                });
+                const constraints = { video: { facingMode: "user" } };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
                 video.srcObject = stream;
                 video.play();
                 overlay.style.display = 'none';
+                resetBtn.style.display = 'flex'; // Reset butonunu göster
+
+                requestWakeLock(); // Ekranı açık tut
                 requestAnimationFrame(processFrame);
             } catch (err) {
-                alert("Kamera izni gerekli.");
+                alert("Kamera Hatası: İzinleri kontrol et.");
             }
         });
 
+        // --- Görüntü İşleme ---
         function processFrame() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = 64;
@@ -307,6 +384,7 @@
             requestAnimationFrame(processFrame);
         }
 
+        // --- Oyun Mantığı ---
         function handleGameLogic(brightness) {
             if (!isDarkState && brightness < settings.thresholdLow) {
                 isDarkState = true;
@@ -340,7 +418,6 @@
                 } else {
                     cooldownContainer.style.backgroundColor = "red";
                     setTimeout(() => { cooldownContainer.style.backgroundColor = "#333"; }, 200);
-                    debugEl.innerText = "Çok hızlı!";
                 }
             }
         }
@@ -363,7 +440,69 @@
             }
         }
 
-        // --- Kalibrasyon ---
+        // --- Sıfırlama Tuşu (1sn Basılı Tutma) ---
+        let resetTimer = null;
+
+        const startReset = (e) => {
+            if (e.cancelable) e.preventDefault();
+            resetBtn.classList.add('pressing');
+            resetTimer = setTimeout(() => {
+                // 1 saniye doldu, sıfırla
+                count = 0;
+                counterEl.innerText = "0";
+                blinkCycle = 0;
+                cycle1.classList.remove('active-dot');
+                cycle2.classList.remove('active-dot');
+                resetBtn.classList.remove('pressing');
+
+                // Geri bildirim titremesi (destekleniyorsa)
+                if (navigator.vibrate) navigator.vibrate(50);
+            }, 1000);
+        };
+
+        const endReset = () => {
+            resetBtn.classList.remove('pressing');
+            if (resetTimer) {
+                clearTimeout(resetTimer);
+                resetTimer = null;
+            }
+        };
+
+        resetBtn.addEventListener('mousedown', startReset);
+        resetBtn.addEventListener('touchstart', startReset);
+        resetBtn.addEventListener('mouseup', endReset);
+        resetBtn.addEventListener('touchend', endReset);
+
+
+        // --- Zorla Güncelleme (Cache Temizleme) ---
+        forceUpdateBtn.addEventListener('click', async () => {
+            if (!navigator.onLine) {
+                alert("Bunu yapmak için internet bağlantısı ŞARTTIR. Lütfen internete bağlanın.");
+                return;
+            }
+
+            if (confirm("Bu işlem uygulamanın tüm verilerini temizleyip sunucudan en güncel halini indirecek. Onaylıyor musunuz?")) {
+                try {
+                    // Service Worker'ı kaldır
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                    }
+
+                    // Tüm Cache'leri sil
+                    const cacheKeys = await caches.keys();
+                    await Promise.all(cacheKeys.map(key => caches.delete(key)));
+
+                    alert("Veriler temizlendi. Uygulama yeniden başlatılıyor...");
+                    window.location.reload(true);
+                } catch (err) {
+                    alert("Temizleme sırasında hata oluştu: " + err);
+                }
+            }
+        });
+
+
+        // --- Kalibrasyon Akışı ---
         let calibStep = 0;
         let pressTimer = null;
         let tempBright = 0;
@@ -371,6 +510,7 @@
 
         calibBtnToggle.addEventListener('click', () => {
             calibOverlay.style.display = 'flex';
+            requestWakeLock(); // Kalibrasyon sırasında da ekran açık kalsın
             startCalibrationFlow();
         });
 
@@ -388,7 +528,7 @@
         function nextCalibrationStep() {
             if (calibStep === 1) {
                 calibStep = 2;
-                calibInstruction.innerText = "2. Kamerayı KARANLIK yap (elini koy) ve basılı tut.";
+                calibInstruction.innerText = "2. KARANLIK (elini koy) için basılı tut.";
                 calibActionBtn.innerText = "BASILI TUT";
                 calibActionBtn.classList.remove('success');
             } else if (calibStep === 2) {
@@ -406,12 +546,19 @@
             settings.darkVal = tempDark;
             localStorage.setItem('blinkCounterSettings', JSON.stringify(settings));
             updateThresholds();
+
             calibInstruction.innerText = "Kaydedildi!";
             calibActionBtn.innerText = "TAMAM";
-            setTimeout(() => { calibOverlay.style.display = 'none'; }, 1000);
+
+            setTimeout(() => {
+                // Kalibrasyon bitince direkt oyuna değil, ana menüye dönüyoruz
+                calibOverlay.style.display = 'none';
+                overlay.style.display = 'flex'; // Başlat ekranını göster
+                resetBtn.style.display = 'none'; // Reset butonunu gizle
+            }, 1000);
         }
 
-        const startPress = (e) => {
+        const startCalibPress = (e) => {
             e.preventDefault();
             calibActionBtn.classList.add('pressing');
             pressTimer = setTimeout(() => {
@@ -421,20 +568,21 @@
                 if (calibStep === 1) tempBright = currentBrightness;
                 else if (calibStep === 2) tempDark = currentBrightness;
                 setTimeout(nextCalibrationStep, 500);
-            }, 500);
+            }, 500); // 0.5 saniye basılı tutma
         };
 
-        const endPress = (e) => {
+        const endCalibPress = (e) => {
             if (e) e.preventDefault();
             calibActionBtn.classList.remove('pressing');
             if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
         };
 
-        calibActionBtn.addEventListener('mousedown', startPress);
-        calibActionBtn.addEventListener('touchstart', startPress);
-        calibActionBtn.addEventListener('mouseup', endPress);
-        calibActionBtn.addEventListener('mouseleave', endPress);
-        calibActionBtn.addEventListener('touchend', endPress);
+        calibActionBtn.addEventListener('mousedown', startCalibPress);
+        calibActionBtn.addEventListener('touchstart', startCalibPress);
+        calibActionBtn.addEventListener('mouseup', endCalibPress);
+        calibActionBtn.addEventListener('mouseleave', endCalibPress);
+        calibActionBtn.addEventListener('touchend', endCalibPress);
+
     </script>
 </body>
 
