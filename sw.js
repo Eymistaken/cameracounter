@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blink-counter-v2'; // Sürüm numarasını güncelledim
+const CACHE_NAME = 'blink-counter-v3'; // GÜNCELLEME İÇİN BURAYI DEĞİŞTİR (v3, v4, v5...)
 const urlsToCache = [
   './',
   './index.html',
@@ -7,10 +7,13 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Yeni sürüm yüklendiğinde eski sürümün kapanmasını beklemeden aktif ol
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
+        console.log('Önbellek açıldı:', CACHE_NAME);
         return cache.addAll(urlsToCache);
       })
   );
@@ -20,6 +23,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
+        // Cache'de varsa onu döndür, yoksa internetten çek
         if (response) {
           return response;
         }
@@ -28,11 +32,14 @@ self.addEventListener('fetch', (event) => {
             if(!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
+
+            // Yeni dosyayı hemen cache'e ekle
             var responseToCache = response.clone();
             caches.open(CACHE_NAME)
               .then((cache) => {
                 cache.put(event.request, responseToCache);
               });
+
             return response;
           }
         );
@@ -41,12 +48,17 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Yeni SW hemen tüm açık sekmelerin kontrolünü ele alsın
+  event.waitUntil(clients.claim());
+
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheWhitelist.indexOf(cacheName) === -1) {
+            // Eski versiyon cache'lerini (örn: blink-counter-v2) sil
+            console.log('Eski cache siliniyor:', cacheName);
             return caches.delete(cacheName);
           }
         })
