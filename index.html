@@ -36,7 +36,6 @@
 
         #counter {
             font-size: 50vw;
-            /* Devasa Boyut */
             font-weight: bold;
             line-height: 1;
             transition: color 0.2s, opacity 0.2s;
@@ -86,7 +85,7 @@
             transition: width 0.1s linear;
         }
 
-        /* Kalibrasyon Butonları */
+        /* Ayarlar Butonu */
         .settings-btn {
             position: absolute;
             top: 20px;
@@ -101,7 +100,6 @@
             color: #ccc;
         }
 
-        /* Sıfırlama Butonu (Sol Alt) */
         #resetBtn {
             position: absolute;
             bottom: 30px;
@@ -125,7 +123,6 @@
             transform: scale(0.9);
         }
 
-        /* Zorla Güncelle Butonu */
         #forceUpdateBtn {
             position: absolute;
             bottom: 30px;
@@ -137,7 +134,6 @@
             z-index: 60;
         }
 
-        /* Kalibrasyon Overlay */
         #calibOverlay {
             position: absolute;
             inset: 0;
@@ -195,12 +191,8 @@
     <video id="hiddenVideo" playsinline muted></video>
     <canvas id="hiddenCanvas"></canvas>
 
-    <!-- Global Ayarlar Butonu -->
-    <button id="calibBtnToggle" class="settings-btn">
-        ⚙️ AYARLAR
-    </button>
+    <button id="calibBtnToggle" class="settings-btn">⚙️ AYARLAR</button>
 
-    <!-- Kalibrasyon Arayüzü -->
     <div id="calibOverlay">
         <h2 class="text-2xl font-bold mb-4 text-white">Işık Ayarı</h2>
         <p id="calibInstruction" class="calib-step-text">...</p>
@@ -209,25 +201,20 @@
         <button id="closeCalib" class="mt-8 text-gray-500 underline text-sm">İptal / Geri Dön</button>
     </div>
 
-    <!-- Ana Arayüz -->
     <div class="center-content">
         <div id="counter">0</div>
 
-        <!-- Cooldown Göstergesi -->
         <div id="cooldownContainer" class="progress-container">
             <div id="cooldownBar" class="progress-bar"></div>
         </div>
 
-        <!-- Durum Noktaları -->
         <div class="flex mt-8 space-x-4">
             <div id="cycle1" class="status-dot"></div>
             <div id="cycle2" class="status-dot"></div>
         </div>
 
-        <!-- Sıfırlama Butonu (Oyun İçin) -->
         <div id="resetBtn">↻</div>
 
-        <!-- Başlangıç Overlay -->
         <div id="startOverlay" class="absolute inset-0 bg-black flex flex-col justify-center items-center z-50">
             <h1 class="text-2xl mb-4 text-gray-300">Hareket Algılayıcı</h1>
             <p class="text-gray-500 mb-2 text-center px-4">1. Hareket: Hazırlık</p>
@@ -238,7 +225,6 @@
                 BAŞLAT
             </button>
 
-            <!-- Zorla Güncelle Butonu -->
             <button id="forceUpdateBtn">⚠️ Ayarlar ve İzinleri Sıfırla (Hard Reset)</button>
         </div>
 
@@ -246,7 +232,7 @@
     </div>
 
     <script>
-        // --- Service Worker Kaydı ---
+        // --- Service Worker ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
@@ -263,11 +249,8 @@
                 }
             } catch (err) { console.error(err); }
         }
-
         document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') {
-                await requestWakeLock();
-            }
+            if (wakeLock !== null && document.visibilityState === 'visible') { await requestWakeLock(); }
         });
 
         // --- Değişkenler ---
@@ -276,7 +259,12 @@
         let isDarkState = false;
         let darkStartTime = 0;
         let currentBrightness = 0;
-        let lastActionTime = 0; // Son başarılı işlem zamanı (Cooldown için)
+        let lastActionTime = 0;
+
+        // Performans Ayarı: FPS Limiti
+        let lastFrameTime = 0;
+        const TARGET_FPS = 15; // Saniyede 15 kare işler (Yeterli ve pil dostu)
+        const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
         let settings = {
             brightVal: 80,
@@ -285,8 +273,8 @@
             thresholdLow: 40
         };
 
-        const MIN_DARK_DURATION = 800; // 0.8 saniye bekleme süresi (GÜNCELLENDİ)
-        const POST_ACTION_COOLDOWN = 800; // Eylem sonrası körlük süresi (YENİ)
+        const MIN_DARK_DURATION = 800;
+        const POST_ACTION_COOLDOWN = 800;
 
         const video = document.getElementById('hiddenVideo');
         const canvas = document.getElementById('hiddenCanvas');
@@ -302,6 +290,7 @@
         const resetBtn = document.getElementById('resetBtn');
         const forceUpdateBtn = document.getElementById('forceUpdateBtn');
 
+        // --- Ayarları Yükle ---
         const calibBtnToggle = document.getElementById('calibBtnToggle');
         const calibOverlay = document.getElementById('calibOverlay');
         const calibInstruction = document.getElementById('calibInstruction');
@@ -317,8 +306,6 @@
 
         function updateThresholds() {
             const range = settings.brightVal - settings.darkVal;
-            // Range negatif veya çok küçük olsa bile (+5, +10) ekleyerek
-            // en azından bir aralık oluşturuyoruz.
             if (range < 10) {
                 settings.thresholdLow = settings.darkVal + 5;
                 settings.thresholdHigh = settings.darkVal + 10;
@@ -332,7 +319,8 @@
         async function initCamera() {
             if (video.srcObject && video.srcObject.active) return true;
             try {
-                const constraints = { video: { facingMode: "user" } };
+                // Daha düşük çözünürlük isteği (Pil dostu)
+                const constraints = { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } } };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
                 video.play();
@@ -353,7 +341,16 @@
             }
         });
 
-        function processFrame() {
+        // --- Optimize Edilmiş Döngü ---
+        function processFrame(timestamp) {
+            requestAnimationFrame(processFrame);
+
+            // FPS Limitleyici
+            const elapsed = timestamp - lastFrameTime;
+            if (elapsed < FRAME_INTERVAL) return;
+
+            lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = 64;
                 canvas.height = 64;
@@ -362,15 +359,16 @@
                 const frame = ctx.getImageData(0, 0, 64, 64);
                 const length = frame.data.length;
                 let totalBrightness = 0;
-
-                for (let i = 0; i < length; i += 16) {
+                
+                // Örnekleme (Hızlandırma)
+                for (let i = 0; i < length; i += 32) {
                     const r = frame.data[i];
                     const g = frame.data[i + 1];
                     const b = frame.data[i + 2];
                     totalBrightness += (r + g + b) / 3;
                 }
 
-                currentBrightness = totalBrightness / (length / 16);
+                currentBrightness = totalBrightness / (length / 32);
 
                 if (calibOverlay.style.display === 'flex') {
                     calibLiveVal.innerText = `Işık: ${Math.floor(currentBrightness)}`;
@@ -379,26 +377,21 @@
                     updateCooldownUI();
                 }
             }
-            requestAnimationFrame(processFrame);
         }
 
         function handleGameLogic(brightness) {
-            // Eylem sonrası bekleme süresi kontrolü (Kamera auto-exposure dalgalanmasını engeller)
             if (Date.now() - lastActionTime < POST_ACTION_COOLDOWN) {
-                // Eğer yeni bir işlem yaptıysak, bir süre her şeyi görmezden gel
                 isDarkState = false;
                 cooldownContainer.style.opacity = "0";
                 return;
             }
 
-            // --- AYDINLIKTAN KARANLIĞA GEÇİŞ ---
             if (!isDarkState && brightness < settings.thresholdLow) {
                 isDarkState = true;
                 darkStartTime = Date.now();
                 counterEl.style.color = "#333";
                 cooldownContainer.style.opacity = "1";
             }
-            // --- KARANLIKTAN AYDINLIĞA GEÇİŞ ---
             else if (isDarkState && brightness > settings.thresholdHigh) {
                 isDarkState = false;
                 counterEl.style.color = "#fff";
@@ -408,9 +401,7 @@
                 const duration = Date.now() - darkStartTime;
 
                 if (duration >= MIN_DARK_DURATION) {
-                    // Geçerli bir hareket yapıldı, cooldown başlat
                     lastActionTime = Date.now();
-
                     blinkCycle++;
                     if (blinkCycle === 1) {
                         cycle1.classList.add('active-dot');
@@ -436,9 +427,7 @@
             count++;
             counterEl.innerText = count;
             counterEl.style.transform = "scale(1.3)";
-            setTimeout(() => {
-                counterEl.style.transform = "scale(1)";
-            }, 150);
+            setTimeout(() => { counterEl.style.transform = "scale(1)"; }, 150);
         }
 
         function updateCooldownUI() {
@@ -455,7 +444,7 @@
             counterEl.innerText = "0";
             blinkCycle = 0;
             isDarkState = false;
-            lastActionTime = Date.now(); // Sıfırlama sonrası hemen tetiklenmesin diye cooldown koyuyoruz
+            lastActionTime = Date.now();
             cycle1.classList.remove('active-dot');
             cycle2.classList.remove('active-dot');
             cooldownContainer.style.opacity = "0";
@@ -486,21 +475,19 @@
                 alert("Bunu yapmak için internet bağlantısı ŞARTTIR.");
                 return;
             }
-            if (confirm("Bu işlem kamera izinlerini yenileyecek, kalibrasyonu varsayılana döndürecek ve uygulamayı güncelleyecek. Onaylıyor musunuz?")) {
+            if (confirm("Sıfırlansın mı?")) {
                 try {
                     localStorage.removeItem('blinkCounterSettings');
                     const registrations = await navigator.serviceWorker.getRegistrations();
                     for (let registration of registrations) await registration.unregister();
                     const cacheKeys = await caches.keys();
                     await Promise.all(cacheKeys.map(key => caches.delete(key)));
-                    alert("Sıfırlandı. Uygulama yeniden başlatılıyor...");
                     window.location.reload(true);
-                } catch (err) {
-                    window.location.reload(true);
-                }
+                } catch (err) { window.location.reload(true); }
             }
         });
 
+        // --- Kalibrasyon ---
         let calibStep = 0;
         let pressTimer = null;
         let tempBright = 0;
@@ -513,7 +500,6 @@
                 startCalibrationFlow();
             }
         });
-
         closeCalib.addEventListener('click', () => {
             calibOverlay.style.display = 'none';
             resetGameState();
@@ -523,37 +509,27 @@
             calibStep = 1;
             calibActionBtn.classList.remove('success');
             calibActionBtn.innerText = "BASILI TUT";
-            calibInstruction.innerText = "Telefonunuzu aydınlık ortama koyun ve kamerayı engellemeden butona basılı tutun.";
+            calibInstruction.innerText = "Aydınlık ortam (Kamera Açık)";
         }
-
         function nextCalibrationStep() {
             if (calibStep === 1) {
                 calibStep = 2;
-                calibInstruction.innerText = "Telefonunuzu karanlık ortama koyun ve basılı tutun.";
+                calibInstruction.innerText = "Karanlık ortam (Kapatılmış)";
                 calibActionBtn.innerText = "BASILI TUT";
                 calibActionBtn.classList.remove('success');
             } else if (calibStep === 2) {
                 finishCalibration();
             }
         }
-
         function finishCalibration() {
-            // İSTEK ÜZERİNE KALDIRILDI:
-            // if (tempDark >= tempBright) { ... }
-
-            // Artık karanlık aydınlıktan parlak olsa bile kabul ediyoruz.
-            // Kamera odak sorunlarında bu gereklidir.
             settings.brightVal = tempBright;
             settings.darkVal = tempDark;
             localStorage.setItem('blinkCounterSettings', JSON.stringify(settings));
             updateThresholds();
-
+            
             calibInstruction.innerText = "Kaydedildi!";
             calibActionBtn.innerText = "TAMAM";
-
-            // KESİN SIFIRLAMA
             resetGameState();
-
             setTimeout(() => {
                 calibOverlay.style.display = 'none';
                 overlay.style.display = 'flex';
@@ -568,6 +544,10 @@
                 calibActionBtn.classList.remove('pressing');
                 calibActionBtn.classList.add('success');
                 calibActionBtn.innerText = "OK";
+                
+                // İSTEK: Kalibrasyon başarılı olunca titret
+                if (navigator.vibrate) navigator.vibrate(50);
+
                 if (calibStep === 1) tempBright = currentBrightness;
                 else if (calibStep === 2) tempDark = currentBrightness;
                 setTimeout(nextCalibrationStep, 500);
@@ -585,5 +565,4 @@
         calibActionBtn.addEventListener('touchend', endCalibPress);
     </script>
 </body>
-
 </html>
