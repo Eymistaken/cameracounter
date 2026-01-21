@@ -317,6 +317,8 @@
 
         function updateThresholds() {
             const range = settings.brightVal - settings.darkVal;
+            // Range negatif veya çok küçük olsa bile (+5, +10) ekleyerek
+            // en azından bir aralık oluşturuyoruz.
             if (range < 10) {
                 settings.thresholdLow = settings.darkVal + 5;
                 settings.thresholdHigh = settings.darkVal + 10;
@@ -536,11 +538,11 @@
         }
 
         function finishCalibration() {
-            if (tempDark >= tempBright) {
-                alert("Hata: Karanlık aydınlıktan parlak olamaz.");
-                startCalibrationFlow();
-                return;
-            }
+            // İSTEK ÜZERİNE KALDIRILDI:
+            // if (tempDark >= tempBright) { ... }
+
+            // Artık karanlık aydınlıktan parlak olsa bile kabul ediyoruz.
+            // Kamera odak sorunlarında bu gereklidir.
             settings.brightVal = tempBright;
             settings.darkVal = tempDark;
             localStorage.setItem('blinkCounterSettings', JSON.stringify(settings));
