@@ -92,7 +92,6 @@
             top: 20px;
             right: 20px;
             z-index: 60;
-            /* Overlay üstünde olsun */
             opacity: 0.7;
             padding: 10px;
             border: 1px solid #444;
@@ -112,7 +111,6 @@
             border-radius: 50%;
             border: 2px solid #333;
             display: none;
-            /* Sadece oyun başlayınca görünür */
             justify-content: center;
             align-items: center;
             font-size: 1.5rem;
@@ -127,7 +125,7 @@
             transform: scale(0.9);
         }
 
-        /* Zorla Güncelle Butonu (Sağ Alt - Sadece Menüde) */
+        /* Zorla Güncelle Butonu */
         #forceUpdateBtn {
             position: absolute;
             bottom: 30px;
@@ -241,7 +239,7 @@
             </button>
 
             <!-- Zorla Güncelle Butonu -->
-            <button id="forceUpdateBtn">⚠️ Güncelleme Sorunu mu var?</button>
+            <button id="forceUpdateBtn">⚠️ Ayarlar ve İzinleri Sıfırla (Hard Reset)</button>
         </div>
 
         <div id="debug" class="absolute bottom-4 text-xs text-gray-800 font-mono text-center w-full">Bekleniyor...</div>
@@ -255,20 +253,15 @@
             });
         }
 
-        // --- Wake Lock (Ekran Kararmasını Engelleme) ---
+        // --- Wake Lock ---
         let wakeLock = null;
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('Ekran uyanık kalacak.');
-                    wakeLock.addEventListener('release', () => {
-                        console.log('Ekran kilidi serbest bırakıldı.');
-                    });
+                    wakeLock.addEventListener('release', () => console.log('Ekran kilidi serbest'));
                 }
-            } catch (err) {
-                console.error(`${err.name}, ${err.message}`);
-            }
+            } catch (err) { console.error(err); }
         }
 
         document.addEventListener('visibilitychange', async () => {
@@ -283,6 +276,7 @@
         let isDarkState = false;
         let darkStartTime = 0;
         let currentBrightness = 0;
+        let lastActionTime = 0; // Son başarılı işlem zamanı (Cooldown için)
 
         let settings = {
             brightVal: 80,
@@ -291,9 +285,9 @@
             thresholdLow: 40
         };
 
-        const MIN_DARK_DURATION = 500;
+        const MIN_DARK_DURATION = 800; // 0.8 saniye bekleme süresi (GÜNCELLENDİ)
+        const POST_ACTION_COOLDOWN = 800; // Eylem sonrası körlük süresi (YENİ)
 
-        // Elementler
         const video = document.getElementById('hiddenVideo');
         const canvas = document.getElementById('hiddenCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -308,7 +302,6 @@
         const resetBtn = document.getElementById('resetBtn');
         const forceUpdateBtn = document.getElementById('forceUpdateBtn');
 
-        // Kalibrasyon
         const calibBtnToggle = document.getElementById('calibBtnToggle');
         const calibOverlay = document.getElementById('calibOverlay');
         const calibInstruction = document.getElementById('calibInstruction');
@@ -316,7 +309,6 @@
         const calibLiveVal = document.getElementById('calibLiveVal');
         const closeCalib = document.getElementById('closeCalib');
 
-        // --- Ayarları Yükle ---
         function loadSettings() {
             const saved = localStorage.getItem('blinkCounterSettings');
             if (saved) { settings = JSON.parse(saved); }
@@ -335,34 +327,22 @@
         }
         loadSettings();
 
-        // --- MERKEZİ KAMERA BAŞLATMA FONKSİYONU ---
-        // Bu fonksiyon hem Start butonunda hem Ayarlar butonunda çağrılır
-        // Böylece izin her zaman istenir.
         async function initCamera() {
-            // Zaten açık mı kontrol et
-            if (video.srcObject && video.srcObject.active) {
-                return true;
-            }
-
+            if (video.srcObject && video.srcObject.active) return true;
             try {
                 const constraints = { video: { facingMode: "user" } };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
                 video.srcObject = stream;
                 video.play();
-
-                // Görüntü işlemeyi başlat (eğer çalışmıyorsa)
                 requestAnimationFrame(processFrame);
                 requestWakeLock();
                 return true;
             } catch (err) {
-                console.error(err);
-                alert("Kamera izni verilmedi. Lütfen tarayıcı/uygulama ayarlarından izin verin.");
+                alert("Kamera izni verilmedi.");
                 return false;
             }
         }
 
-        // --- Başlatma ---
         startBtn.addEventListener('click', async () => {
             const success = await initCamera();
             if (success) {
@@ -371,7 +351,6 @@
             }
         });
 
-        // --- Görüntü İşleme ---
         function processFrame() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = 64;
@@ -401,14 +380,23 @@
             requestAnimationFrame(processFrame);
         }
 
-        // --- Oyun Mantığı ---
         function handleGameLogic(brightness) {
+            // Eylem sonrası bekleme süresi kontrolü (Kamera auto-exposure dalgalanmasını engeller)
+            if (Date.now() - lastActionTime < POST_ACTION_COOLDOWN) {
+                // Eğer yeni bir işlem yaptıysak, bir süre her şeyi görmezden gel
+                isDarkState = false;
+                cooldownContainer.style.opacity = "0";
+                return;
+            }
+
+            // --- AYDINLIKTAN KARANLIĞA GEÇİŞ ---
             if (!isDarkState && brightness < settings.thresholdLow) {
                 isDarkState = true;
                 darkStartTime = Date.now();
                 counterEl.style.color = "#333";
                 cooldownContainer.style.opacity = "1";
             }
+            // --- KARANLIKTAN AYDINLIĞA GEÇİŞ ---
             else if (isDarkState && brightness > settings.thresholdHigh) {
                 isDarkState = false;
                 counterEl.style.color = "#fff";
@@ -418,6 +406,9 @@
                 const duration = Date.now() - darkStartTime;
 
                 if (duration >= MIN_DARK_DURATION) {
+                    // Geçerli bir hareket yapıldı, cooldown başlat
+                    lastActionTime = Date.now();
+
                     blinkCycle++;
                     if (blinkCycle === 1) {
                         cycle1.classList.add('active-dot');
@@ -457,21 +448,19 @@
             }
         }
 
-        // --- Tam Sıfırlama (Oyun Durumu) ---
         function resetGameState() {
             count = 0;
             counterEl.innerText = "0";
             blinkCycle = 0;
             isDarkState = false;
+            lastActionTime = Date.now(); // Sıfırlama sonrası hemen tetiklenmesin diye cooldown koyuyoruz
             cycle1.classList.remove('active-dot');
             cycle2.classList.remove('active-dot');
             cooldownContainer.style.opacity = "0";
             debugEl.innerText = "Hazır";
         }
 
-        // --- Sıfırlama Tuşu (1sn Basılı Tutma) ---
         let resetTimer = null;
-
         const startReset = (e) => {
             if (e.cancelable) e.preventDefault();
             resetBtn.classList.add('pressing');
@@ -481,60 +470,40 @@
                 if (navigator.vibrate) navigator.vibrate(50);
             }, 1000);
         };
-
         const endReset = () => {
             resetBtn.classList.remove('pressing');
-            if (resetTimer) {
-                clearTimeout(resetTimer);
-                resetTimer = null;
-            }
+            if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
         };
-
         resetBtn.addEventListener('mousedown', startReset);
         resetBtn.addEventListener('touchstart', startReset);
         resetBtn.addEventListener('mouseup', endReset);
         resetBtn.addEventListener('touchend', endReset);
 
-
-        // --- Zorla Güncelleme (Cache ve Ayar Temizleme) ---
         forceUpdateBtn.addEventListener('click', async () => {
             if (!navigator.onLine) {
-                alert("Bunu yapmak için internet bağlantısı ŞARTTIR. Lütfen internete bağlanın.");
+                alert("Bunu yapmak için internet bağlantısı ŞARTTIR.");
                 return;
             }
-
             if (confirm("Bu işlem kamera izinlerini yenileyecek, kalibrasyonu varsayılana döndürecek ve uygulamayı güncelleyecek. Onaylıyor musunuz?")) {
                 try {
-                    // 1. Ayarları Sil
                     localStorage.removeItem('blinkCounterSettings');
-
-                    // 2. Service Worker'ı kaldır
                     const registrations = await navigator.serviceWorker.getRegistrations();
-                    for (let registration of registrations) {
-                        await registration.unregister();
-                    }
-
-                    // 3. Cache'leri sil
+                    for (let registration of registrations) await registration.unregister();
                     const cacheKeys = await caches.keys();
                     await Promise.all(cacheKeys.map(key => caches.delete(key)));
-
                     alert("Sıfırlandı. Uygulama yeniden başlatılıyor...");
                     window.location.reload(true);
                 } catch (err) {
-                    alert("Hata oluştu: " + err);
                     window.location.reload(true);
                 }
             }
         });
 
-
-        // --- Kalibrasyon Akışı ---
         let calibStep = 0;
         let pressTimer = null;
         let tempBright = 0;
         let tempDark = 0;
 
-        // Ayarlar butonuna basınca da kamera izni iste
         calibBtnToggle.addEventListener('click', async () => {
             const success = await initCamera();
             if (success) {
@@ -545,7 +514,6 @@
 
         closeCalib.addEventListener('click', () => {
             calibOverlay.style.display = 'none';
-            // İptal edince de sıfırlayalım ki karışıklık olmasın
             resetGameState();
         });
 
@@ -581,12 +549,12 @@
             calibInstruction.innerText = "Kaydedildi!";
             calibActionBtn.innerText = "TAMAM";
 
-            // Kritik: Kalibrasyon sonrası tüm oyun durumunu sıfırla
+            // KESİN SIFIRLAMA
             resetGameState();
 
             setTimeout(() => {
                 calibOverlay.style.display = 'none';
-                overlay.style.display = 'flex'; // Başlat ekranına dön
+                overlay.style.display = 'flex';
                 resetBtn.style.display = 'none';
             }, 1000);
         }
@@ -603,19 +571,16 @@
                 setTimeout(nextCalibrationStep, 500);
             }, 500);
         };
-
         const endCalibPress = (e) => {
             if (e) e.preventDefault();
             calibActionBtn.classList.remove('pressing');
             if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
         };
-
         calibActionBtn.addEventListener('mousedown', startCalibPress);
         calibActionBtn.addEventListener('touchstart', startCalibPress);
         calibActionBtn.addEventListener('mouseup', endCalibPress);
         calibActionBtn.addEventListener('mouseleave', endCalibPress);
         calibActionBtn.addEventListener('touchend', endCalibPress);
-
     </script>
 </body>
 
